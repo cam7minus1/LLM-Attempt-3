@@ -31,6 +31,36 @@ public class Layer {
         return results;
     }
 
+    public float[] backwardsPass(float[] lastErrorSignals, float learningRate) {
+
+        int numNeurons = neurons.length;
+        int inputSize = neurons[0].getWeights().length;
+
+        float[] prevErrorSignals = new float[inputSize];
+
+        // For each neuron in this layer
+        for (int n = 0; n < numNeurons; n++) {
+
+            float blame = lastErrorSignals[n];
+
+            // Apply ReLU derivative
+            if (neurons[n].lastActivation <= 0) {
+                blame = 0;
+            }
+
+            // Accumulate error for previous layer
+            float[] w = neurons[n].getWeights();
+            for (int i = 0; i < inputSize; i++) {
+                prevErrorSignals[i] += w[i] * blame;
+            }
+
+            // Update weights + bias
+            neurons[n].backwardsPass(blame, learningRate);
+        }
+
+        return prevErrorSignals;
+    }
+
     @Override
     public String toString(){
         String result = "Layer - size:"+this.neurons.length+" \n";

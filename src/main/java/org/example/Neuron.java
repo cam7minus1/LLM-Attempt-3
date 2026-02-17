@@ -2,16 +2,18 @@ package org.example;
 
 public class Neuron {
 
-    float[] weights;
-    float bias;
     boolean isOutputLayer;
+    float bias;
     float lastActivation;
+    float[] weights;
+    float[] lastInputs;
 
     public Neuron(int numWeights, boolean isOutputLayer){
         this.weights = new float[numWeights];
         this.bias = (float) Math.random();
         this.isOutputLayer = isOutputLayer;
         this.lastActivation = -1.0f;
+        this.lastInputs = new float[numWeights];
 
         for (int i = 0; i < numWeights; i++){
             weights[i] = (float) Math.random();
@@ -62,6 +64,15 @@ public class Neuron {
         }else{
             lastActivation = Relu(result);
             return  lastActivation;
+        }
+
+    }
+
+    public void backwardsPass(float blameSignal, float learningRate){
+        this.bias = this.bias - (learningRate * blameSignal);
+
+        for (int i = 0; i < weights.length; i++){
+            weights[i] = weights[i] - (learningRate * blameSignal * lastInputs[i]);
         }
 
     }

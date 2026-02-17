@@ -47,4 +47,12 @@ public class Network {
         return softMaxActivation(previous);
     }
 
+    public void backwards(float[] blames, float learningRate){
+        float[] prevErrorSignal = blames;
+        // Start at the last layer and work backwards
+        for (int i = layers.length -1; i >= 0; i--){
+            prevErrorSignal = layers[i].backwardsPass(prevErrorSignal, learningRate);
+        }
+    }
+
 }
