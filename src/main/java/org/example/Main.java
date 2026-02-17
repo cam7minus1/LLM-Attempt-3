@@ -8,11 +8,11 @@ public class Main {
     static void main() {
 
 
-        int size = 10;
-        Network n = new Network(3, size);
-        Trainer trainer = new Trainer(n, 0.1f);
+        int size = 100;
+        Network n = new Network(5, size);
+        Trainer trainer = new Trainer(n, 0.001f);
 
-        trainer.mockTrain(10, size, 100);
+        trainer.mockTrain(100, size, 100);
 
 
     }

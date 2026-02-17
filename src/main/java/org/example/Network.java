@@ -19,17 +19,21 @@ public class Network {
         }
     }
 
-    public float[] softMaxActivation(float[] input){
-        double eKDenom = 0;
-        float[] result = new float[input.length];
-        for (int i = 0; i < input.length; i++){
-            double k = (double) input[i];
-            eKDenom += Math.exp(k);
+    public float[] softMaxActivation(float[] input) {
+        float max = Float.NEGATIVE_INFINITY;
+        for (float v : input) {
+            if (v > max) max = v;
         }
 
-        for (int i = 0; i < input.length; i++){
-            double res = Math.exp(input[i])/eKDenom;
-            result[i] =  (float) res;
+        double sum = 0.0;
+        float[] result = new float[input.length];
+
+        for (int i = 0; i < input.length; i++) {
+            sum += Math.exp(input[i] - max);
+        }
+
+        for (int i = 0; i < input.length; i++) {
+            result[i] = (float)(Math.exp(input[i] - max) / sum);
         }
 
         return result;

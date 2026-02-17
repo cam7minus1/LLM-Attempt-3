@@ -50,6 +50,9 @@ public class Neuron {
     public float forwardPass(float[] inputs){
         float result = 0.0f;
 
+        // Save the last inputs for backwards pass
+        this.lastInputs = inputs.clone();
+
         // Weighted sum + Bias
         for (int i = 0; i < weights.length; i++){
             result += weights[i] * inputs[i];

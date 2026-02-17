@@ -44,7 +44,7 @@ public class Layer {
             float blame = lastErrorSignals[n];
 
             // Apply ReLU derivative
-            if (neurons[n].lastActivation <= 0) {
+            if (!neurons[n].isOutputLayer && neurons[n].lastActivation <= 0) {
                 blame = 0;
             }
 
