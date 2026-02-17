@@ -22,7 +22,6 @@ public class Neuron {
 
     public void setBias(float newBias){
         this.bias = newBias;
-        System.out.println("New bias is "+newBias);
     }
 
     public float getBias(){
@@ -48,17 +47,14 @@ public class Neuron {
     }
 
     public float forwardPass(float[] inputs){
-        float result = 0.0f;
-
-        // Save the last inputs for backwards pass
         this.lastInputs = inputs.clone();
 
-        // Weighted sum + Bias
+        float result = 0.0f;
+
         for (int i = 0; i < weights.length; i++){
             result += weights[i] * inputs[i];
         }
 
-        // Add the bias;
         result += bias;
 
         if (isOutputLayer){
@@ -68,7 +64,6 @@ public class Neuron {
             lastActivation = Relu(result);
             return  lastActivation;
         }
-
     }
 
     public void backwardsPass(float blameSignal, float learningRate){
@@ -77,18 +72,5 @@ public class Neuron {
         for (int i = 0; i < weights.length; i++){
             weights[i] = weights[i] - (learningRate * blameSignal * lastInputs[i]);
         }
-
     }
-
-    @Override
-    public String toString(){
-        String output = "Node Data \n Bias: "+this.bias;
-
-        for (int i = 0; i < weights.length; i++){
-            output += "\n Weight "+i+" = "+weights[i];
-        }
-
-        return  output;
-    }
-
 }
