@@ -62,7 +62,7 @@ public class Trainer {
     public void trainRealData(String cleanedFilePath, String embeddingsPath, int epochs) {
 
         try {
-            // 1. Load embeddings
+            // 1. Load embeddings JSON
             Gson gson = new Gson();
             Map<String, Object> jsonData = gson.fromJson(
                     new FileReader(embeddingsPath),
@@ -75,7 +75,11 @@ public class Trainer {
             vocabList = new ArrayList<>();
             wordToIndex = new HashMap<>();
 
-            for (String word : loaded.keySet()) {
+            // SORT KEYS FOR STABLE, CONSISTENT VOCAB ORDER
+            List<String> sortedWords = new ArrayList<>(loaded.keySet());
+            Collections.sort(sortedWords);
+
+            for (String word : sortedWords) {
                 List<Double> vecD = loaded.get(word);
                 float[] vec = new float[]{
                         vecD.get(0).floatValue(),
@@ -140,7 +144,7 @@ public class Trainer {
                 String nextWord = words.get(i);
                 float[] label = new float[outputSize];
                 Integer idx = wordToIndex.get(nextWord);
-                if (idx != null) {
+                if (idx != null && idx < outputSize) {
                     label[idx] = 1.0f;
                     inputs.add(inputVec);
                     labels.add(label);

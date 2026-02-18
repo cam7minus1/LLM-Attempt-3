@@ -40,7 +40,7 @@ public class Layer {
 
             // Only apply ReLU derivative if NOT output layer
             if (!neurons[n].isOutputLayer && neurons[n].lastActivation <= 0) {
-                blame = 0;
+                blame = blame * 0.01f;
             }
 
             float[] w = neurons[n].getWeights();

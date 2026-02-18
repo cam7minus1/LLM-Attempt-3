@@ -12,6 +12,9 @@ public class Main {
     public static void main(String[] args) {
 
         try {
+
+            String mode = "trainchat";
+
             // 1. Load vocab size
             File jsonFile = new File("src/main/resources/wordEmbeddings.json");
 
@@ -43,18 +46,48 @@ public class Main {
             String weightsPath = "src/main/resources/networkWeights.json";
             Network network = Network.loadOrCreate(weightsPath, inputSize, hiddenSize, outputSize, numHiddenLayers);
 
-            // 4. Trainer
-            Trainer trainer = new Trainer(network, 0.00001f, vocabSize);
+            // 4. Tokenizer
+            Tokenizer tokenizer = new Tokenizer("src/main/resources/wordEmbeddings.json");
 
-            // 5. Train on real data
-            trainer.trainRealData(
-                    "src/main/resources/trainingData.txt",
-                    "src/main/resources/wordEmbeddings.json",
-                    10
-            );
+            // MODE HANDLING
+            switch (mode) {
 
-            // 6. Save weights
-            network.saveWeights(weightsPath);
+                case "train":
+                    System.out.println("=== TRAIN MODE ===");
+                    Trainer trainer = new Trainer(network, 0.00001f, vocabSize);
+                    trainer.trainRealData(
+                            "src/main/resources/trainingData.txt",
+                            "src/main/resources/wordEmbeddings.json",
+                            100000
+                    );
+                    network.saveWeights(weightsPath);
+                    System.out.println("Training complete.");
+                    break;
+
+                case "chat":
+                    System.out.println("=== CHAT MODE ===");
+                    Chat chat = new Chat(network, tokenizer, windowSize);
+                    chat.start();
+                    break;
+
+                case "trainchat":
+                    System.out.println("=== TRAIN + CHAT MODE ===");
+                    Trainer trainer2 = new Trainer(network, 0.00001f, vocabSize);
+                    trainer2.trainRealData(
+                            "src/main/resources/trainingData.txt",
+                            "src/main/resources/wordEmbeddings.json",
+                            20000
+                    );
+                    network.saveWeights(weightsPath);
+
+                    Chat chat2 = new Chat(network, tokenizer, windowSize);
+                    chat2.start();
+                    break;
+
+                default:
+                    System.out.println("Unknown mode: " + mode);
+                    System.out.println("Usage: java -jar app.jar [train | chat | trainchat]");
+            }
 
         } catch (Exception e) {
             e.printStackTrace();

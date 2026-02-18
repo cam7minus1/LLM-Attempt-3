@@ -1,5 +1,7 @@
 package org.example;
 
+import java.util.Random;
+
 public class Neuron {
 
     boolean isOutputLayer;
@@ -10,14 +12,18 @@ public class Neuron {
 
     public Neuron(int numWeights, boolean isOutputLayer){
         this.weights = new float[numWeights];
-        this.bias = (float) Math.random();
         this.isOutputLayer = isOutputLayer;
         this.lastActivation = -1.0f;
         this.lastInputs = new float[numWeights];
 
-        for (int i = 0; i < numWeights; i++){
-            weights[i] = (float) Math.random();
+        Random rand = new Random();
+        float scale = (float) Math.sqrt(2.0 / numWeights);
+
+        for (int i = 0; i < numWeights; i++) {
+            weights[i] = (float) rand.nextGaussian() * scale;
         }
+
+        this.bias = 0.0f;
     }
 
     public void setBias(float newBias){
@@ -38,11 +44,11 @@ public class Neuron {
         return this.weights;
     }
 
-    public float Relu(float input){
-        if (input > 0){
+    public float Relu(float input) {
+        if (input > 0) {
             return input;
-        }else{
-            return 0.0f;
+        } else {
+            return 0.01f * input;
         }
     }
 
