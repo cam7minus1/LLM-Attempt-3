@@ -35,10 +35,10 @@ public class Main {
             System.out.println("Loaded vocab size: " + vocabSize);
 
             // 2. Network config
-            int windowSize = 50;
+            int windowSize = 10;
             int perTokenSize = 4; // 3 emb + 1 pos
             int inputSize = windowSize * perTokenSize; // 200
-            int hiddenSize = 32;
+            int hiddenSize = 64;
             int outputSize = vocabSize;
             int numHiddenLayers = 2;
 
@@ -54,7 +54,7 @@ public class Main {
 
                 case "train":
                     System.out.println("=== TRAIN MODE ===");
-                    Trainer trainer = new Trainer(network, 0.00001f, vocabSize);
+                    Trainer trainer = new Trainer(network, 0.001f, vocabSize);
                     trainer.trainRealData(
                             "src/main/resources/trainingData.txt",
                             "src/main/resources/wordEmbeddings.json",
@@ -76,7 +76,7 @@ public class Main {
                     trainer2.trainRealData(
                             "src/main/resources/trainingData.txt",
                             "src/main/resources/wordEmbeddings.json",
-                            20000
+                            30000
                     );
                     network.saveWeights(weightsPath);
 

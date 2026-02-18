@@ -73,6 +73,7 @@ public class PrepData {
                     vocab.add(w);
                 }
             }
+            vocab.add("<END>"); // fine to call multiple times, Set ignores duplicates
         }
 
         // -------------------------------
@@ -84,7 +85,7 @@ public class PrepData {
         Map<String, float[]> embeddings = new HashMap<>();
         Set<String> usedVectors = new HashSet<>();
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
         if (outFile.exists()) {
             try (FileReader fr = new FileReader(outFile)) {
@@ -118,7 +119,7 @@ public class PrepData {
 
         for (String word : vocab) {
             if (embeddings.containsKey(word)) {
-                continue; // already exists
+                continue;
             }
 
             float[] vec;
@@ -137,6 +138,21 @@ public class PrepData {
             usedVectors.add(signature);
             embeddings.put(word, vec);
         }
+
+        // Force-add <END> if somehow still missing
+        if (!embeddings.containsKey("<END>")) {
+            float[] vec;
+            String signature;
+            do {
+                vec = new float[]{ rand.nextFloat(), rand.nextFloat(), rand.nextFloat() };
+                signature = vec[0] + "," + vec[1] + "," + vec[2];
+            } while (usedVectors.contains(signature));
+            usedVectors.add(signature);
+            embeddings.put("<END>", vec);
+        }
+        System.out.println("<END> in embeddings: " + embeddings.containsKey("<END>"));
+        System.out.println("<END> in embeddings: " + embeddings.containsKey("<END>"));
+        System.out.println("<END> in embeddings: " + embeddings.containsKey("<END>"));
 
         // -------------------------------
         // 6. Save updated JSON

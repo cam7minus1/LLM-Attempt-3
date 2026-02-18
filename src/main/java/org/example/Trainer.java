@@ -107,6 +107,10 @@ public class Trainer {
                             words.add(w);
                         }
                     }
+
+                    if (embeddings.containsKey("<END>")) {
+                        words.add("<END>");
+                    }
                 }
             }
 
