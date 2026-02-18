@@ -70,6 +70,22 @@ public class Chat {
         return tokens;
     }
 
+    private int sampleWithTemperature(float[] probs, float temperature) {
+        float[] scaled = new float[probs.length];
+        float sum = 0;
+        for (int i = 0; i < probs.length; i++) {
+            scaled[i] = (float) Math.exp(Math.log(probs[i] + 1e-10) / temperature);
+            sum += scaled[i];
+        }
+        float r = (float) Math.random() * sum;
+        float cumulative = 0;
+        for (int i = 0; i < scaled.length; i++) {
+            cumulative += scaled[i];
+            if (r <= cumulative) return i;
+        }
+        return scaled.length - 1;
+    }
+
     // Generate a response using autoregressive next-token prediction
     private String generateResponse(List<Integer> history) {
 
@@ -84,7 +100,7 @@ public class Chat {
 
             float[] output = network.forward(inputVector);
 
-            int nextToken = argmax(output);
+            int nextToken = sampleWithTemperature(output, 0.8f);
 
             String nextWord = tokenizer.getWord(nextToken);
 

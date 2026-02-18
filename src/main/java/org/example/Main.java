@@ -13,7 +13,7 @@ public class Main {
 
         try {
 
-            String mode = "trainchat";
+            String mode = "chat";
 
             // 1. Load vocab size
             File jsonFile = new File("src/main/resources/wordEmbeddings.json");
