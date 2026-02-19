@@ -1,0 +1,11 @@
+{
+  "embedSize": 512,
+  "numHeads": 8,
+  "numBlocks": 22,
+  "ffSize": 1024,
+  "windowSize": 20,
+  "learningRate": 1.0E-4,
+  "epochs": 50000,
+  "batchSize": 32,
+  "vocabSize": 1961
+}

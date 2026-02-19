@@ -12,57 +12,23 @@ public class Trainer {
     CrossCatagoricalEntropyLoss ccel;
     float learningRate;
     int outputSize;
+    int batchSize;
 
     Map<String, float[]> embeddings;
     List<String> vocabList;
     Map<String, Integer> wordToIndex;
 
-    public Trainer(Network network, float learningRate, int outputSize){
+    public Trainer(Network network, float learningRate, int outputSize, int batchSize) {
         this.network = network;
         this.ccel = new CrossCatagoricalEntropyLoss();
         this.learningRate = learningRate;
         this.outputSize = outputSize;
+        this.batchSize = batchSize;
     }
 
-    // ---------------- MOCK TRAIN ----------------
-
-    public float[][] getFakeTrainingData(int numElements, int sizeOfData){
-        float[][] data = new float[numElements][sizeOfData];
-        java.util.Random rand = new java.util.Random();
-
-        for (int i = 0; i < numElements; i++) {
-            for (int k = 0; k < sizeOfData; k++) {
-                data[i][k] = rand.nextFloat();
-            }
-        }
-
-        return data;
-    }
-
-    public float[][] getFakeLabels(int numElements) {
-        float[][] labels = new float[numElements][outputSize];
-        java.util.Random rand = new java.util.Random();
-
-        for (int i = 0; i < numElements; i++) {
-            int index = rand.nextInt(outputSize);
-            labels[i][index] = 1.0f;
-        }
-
-        return labels;
-    }
-
-    public void mockTrain(int numElementsToTrain, int inputSize, int epochs){
-        float[][] trainingData = getFakeTrainingData(numElementsToTrain, inputSize);
-        float[][] labels = getFakeLabels(numElementsToTrain);
-        train(trainingData, labels, epochs);
-    }
-
-    // ---------------- REAL TRAIN ----------------
-
-    public void trainRealData(String cleanedFilePath, String embeddingsPath, int epochs) {
-
+    public void trainRealData(String cleanedFilePath, String embeddingsPath, int epochs, Config config) {
         try {
-            // 1. Load embeddings JSON
+            // 1. Load embeddings
             Gson gson = new Gson();
             Map<String, Object> jsonData = gson.fromJson(
                     new FileReader(embeddingsPath),
@@ -75,17 +41,15 @@ public class Trainer {
             vocabList = new ArrayList<>();
             wordToIndex = new HashMap<>();
 
-            // SORT KEYS FOR STABLE, CONSISTENT VOCAB ORDER
             List<String> sortedWords = new ArrayList<>(loaded.keySet());
             Collections.sort(sortedWords);
 
             for (String word : sortedWords) {
                 List<Double> vecD = loaded.get(word);
-                float[] vec = new float[128];
-                for (int j = 0; j < 128; j++) {
+                float[] vec = new float[config.embedSize];
+                for (int j = 0; j < config.embedSize; j++) {
                     vec[j] = vecD.get(j).floatValue();
                 }
-
                 embeddings.put(word, vec);
                 vocabList.add(word);
             }
@@ -94,111 +58,86 @@ public class Trainer {
                 wordToIndex.put(vocabList.get(i), i);
             }
 
-            // 2. Load cleaned training data into word list
-            List<String> words = new ArrayList<>();
+            System.out.println("Embeddings loaded. Starting training...");
 
-            try (BufferedReader br = new BufferedReader(new FileReader(cleanedFilePath))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    String[] split = line.toLowerCase().split("[^a-zA-Z0-9']+");
-                    for (String w : split) {
-                        if (!w.isEmpty() && embeddings.containsKey(w)) {
-                            words.add(w);
+            // 2. Train epoch by epoch, reading file in batches
+            for (int e = 0; e < epochs; e++) {
+                float epochLoss = 0f;
+                int totalExamples = 0;
+
+                try (BufferedReader br = new BufferedReader(new FileReader(cleanedFilePath))) {
+
+                    List<String> wordBuffer = new ArrayList<>();
+                    String line;
+
+                    while (true) {
+                        line = br.readLine();
+
+                        if (line != null) {
+                            String[] split = line.toLowerCase().split("[^a-zA-Z0-9']+");
+                            for (String w : split) {
+                                if (!w.isEmpty() && embeddings.containsKey(w)) {
+                                    wordBuffer.add(w);
+                                }
+                            }
+                            if (embeddings.containsKey("<END>")) {
+                                wordBuffer.add("<END>");
+                            }
                         }
-                    }
-                    if (embeddings.containsKey("<END>")) {
-                        words.add("<END>");
+
+                        boolean fileEnded = (line == null);
+
+                        while (wordBuffer.size() >= config.windowSize + batchSize ||
+                                (fileEnded && wordBuffer.size() > config.windowSize)) {
+
+                            List<float[][]> batchInputs = new ArrayList<>();
+                            List<float[]> batchLabels = new ArrayList<>();
+
+                            int limit = Math.min(batchSize, wordBuffer.size() - config.windowSize);
+
+                            for (int i = 0; i < limit; i++) {
+                                float[][] tokenWindow = new float[config.windowSize][];
+                                for (int p = 0; p < config.windowSize; p++) {
+                                    tokenWindow[p] = embeddings.get(wordBuffer.get(i + p));
+                                }
+
+                                String nextWord = wordBuffer.get(i + config.windowSize);
+                                Integer idx = wordToIndex.get(nextWord);
+                                if (idx != null && idx < outputSize) {
+                                    float[] label = new float[outputSize];
+                                    label[idx] = 1.0f;
+                                    batchInputs.add(tokenWindow);
+                                    batchLabels.add(label);
+                                }
+                            }
+
+                            for (int i = 0; i < batchInputs.size(); i++) {
+                                float[] output = network.forward(batchInputs.get(i));
+                                float loss = ccel.calculate(output, batchLabels.get(i));
+                                epochLoss += loss;
+                                totalExamples++;
+
+                                float[] errorSignal = new float[output.length];
+                                for (int j = 0; j < output.length; j++) {
+                                    errorSignal[j] = output[j] - batchLabels.get(i)[j];
+                                }
+                                network.backward(errorSignal, learningRate);
+                            }
+
+                            wordBuffer.subList(0, limit).clear();
+                        }
+
+                        if (fileEnded) break;
                     }
                 }
+
+                float avgLoss = totalExamples > 0 ? epochLoss / totalExamples : 0;
+                System.out.println("Epoch " + e + " - Avg Loss: " + avgLoss + " - Examples: " + totalExamples);
+                network.saveWeights("src/main/resources/networkWeights.json");
             }
-
-            if (words.size() < 11) {
-                System.out.println("Not enough words for context window.");
-                return;
-            }
-
-            // 3. Build context windows
-            List<float[]> inputs = new ArrayList<>();
-            List<float[]> labels = new ArrayList<>();
-
-            int windowSize = 10;
-            int perTokenSize = 129; // 128 embedding + 1 position
-            int inputSize = windowSize * perTokenSize;
-
-            for (int i = windowSize; i < words.size(); i++) {
-                float[] inputVec = new float[inputSize];
-
-                int offset = 0;
-                for (int p = 0; p < windowSize; p++) {
-                    String w = words.get(i - windowSize + p);
-                    float[] emb = embeddings.get(w);
-
-                    for (int j = 0; j < 128; j++) {
-                        inputVec[offset + j] = emb[j];
-                    }
-                    float posNorm = (float)p / (float)(windowSize - 1);
-                    inputVec[offset + 128] = posNorm;
-
-                    offset += perTokenSize;
-                }
-
-                String nextWord = words.get(i);
-                float[] label = new float[outputSize];
-                Integer idx = wordToIndex.get(nextWord);
-                if (idx != null && idx < outputSize) {
-                    label[idx] = 1.0f;
-                    inputs.add(inputVec);
-                    labels.add(label);
-                }
-            }
-
-            float[][] inputArr = inputs.toArray(new float[0][]);
-            float[][] labelArr = labels.toArray(new float[0][]);
-
-            train(inputArr, labelArr, epochs);
 
         } catch (Exception e) {
             e.printStackTrace();
-        }
-    }
-
-    // ---------------- CORE TRAIN LOOP ----------------
-
-    public void train(float[][] trainingData, float[][] labels, int epochs) {
-        System.out.println("Beginning training...");
-
-        for (int e = 0; e < epochs; e++) {
-
-            float epochLoss = 0f;
-
-            for (int i = 0; i < trainingData.length; i++) {
-
-                float[] inputData = trainingData[i];
-                float[] expectedOutput = labels[i];
-
-                float[] softmaxOutput = this.network.forward(inputData);
-
-                float loss = ccel.calculate(softmaxOutput, expectedOutput);
-                epochLoss += loss;
-
-                float[] outputBlame = new float[softmaxOutput.length];
-                for (int j = 0; j < softmaxOutput.length; j++) {
-                    outputBlame[j] = softmaxOutput[j] - expectedOutput[j];
-                }
-
-                this.network.backwards(outputBlame, this.learningRate);
-            }
-
-            float avgLoss = epochLoss / trainingData.length;
-            System.out.println("Epoch " + e + " - Avg Loss: " + avgLoss);
-
-            // Save every 1000 epochs
-            network.saveWeights("src/main/resources/networkWeights.json");
-            // System.out.println("Checkpoint saved at epoch " + e);
-//            if (e % 5 == 0 && e > 0) {
-//                network.saveWeights("src/main/resources/networkWeights.json");
-//                System.out.println("Checkpoint saved at epoch " + e);
-//            }
         }
     }
 }

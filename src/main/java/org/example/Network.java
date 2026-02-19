@@ -4,100 +4,133 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Network {
 
-    Layer[] layers;
+    TransformerBlock[] transformerBlocks;
+    Layer outputLayer;
+    int embedSize;
+    int vocabSize;
 
-    public Network(int inputSize, int hiddenSize, int outputSize, int numHiddenLayers) {
+    public Network(int embedSize, int vocabSize, int numHeads, int numBlocks, int ffSize) {
+        this.embedSize = embedSize;
+        this.vocabSize = vocabSize;
 
-        layers = new Layer[numHiddenLayers + 1];
-
-        // First hidden layer
-        layers[0] = new Layer(hiddenSize, inputSize, false);
-
-        // Middle hidden layers
-        for (int i = 1; i < numHiddenLayers; i++) {
-            layers[i] = new Layer(hiddenSize, hiddenSize, false);
+        transformerBlocks = new TransformerBlock[numBlocks];
+        for (int i = 0; i < numBlocks; i++) {
+            transformerBlocks[i] = new TransformerBlock(embedSize, numHeads, ffSize);
         }
 
-        // Output layer
-        layers[numHiddenLayers] = new Layer(outputSize, hiddenSize, true);
+        outputLayer = new Layer(vocabSize, embedSize, true);
     }
 
-    public float[] softMaxActivation(float[] input) {
+    public float[] forward(float[][] tokens) {
+        float[][] current = tokens;
+
+        for (TransformerBlock block : transformerBlocks) {
+            float[] blockOutput = block.forward(current);
+
+            float[][] next = new float[current.length][];
+            for (int i = 0; i < current.length - 1; i++) {
+                next[i] = current[i];
+            }
+            next[current.length - 1] = blockOutput;
+            current = next;
+        }
+
+        float[] logits = outputLayer.forwardPass(current[current.length - 1]);
+        return softmax(logits);
+    }
+
+    public void backward(float[] errorSignal, float learningRate) {
+        float[] err = outputLayer.backwardsPass(errorSignal, learningRate);
+
+        for (int i = transformerBlocks.length - 1; i >= 0; i--) {
+            err = transformerBlocks[i].backward(err, learningRate);
+        }
+    }
+
+    public float[] softmax(float[] input) {
         float max = Float.NEGATIVE_INFINITY;
-        for (float v : input) {
-            if (v > max) max = v;
-        }
+        for (float v : input) if (v > max) max = v;
 
-        double sum = 0.0;
+        double sum = 0;
         float[] result = new float[input.length];
-
         for (int i = 0; i < input.length; i++) {
-            sum += Math.exp(input[i] - max);
+            result[i] = (float) Math.exp(input[i] - max);
+            sum += result[i];
         }
-
         for (int i = 0; i < input.length; i++) {
-            result[i] = (float)(Math.exp(input[i] - max) / sum);
+            result[i] /= sum;
         }
-
         return result;
     }
 
-    public float[] forward(float[] input) {
-        float[] previous = input;
+    // ---------- COLLECT ALL LAYERS ----------
 
-        for (Layer layer : layers) {
-            previous = layer.forwardPass(previous);
+    private Layer[] getAllTransformerLayers() {
+        List<Layer> all = new ArrayList<>();
+        for (TransformerBlock block : transformerBlocks) {
+            for (Layer l : block.getLayers()) {
+                all.add(l);
+            }
         }
-
-        return softMaxActivation(previous);
+        return all.toArray(new Layer[0]);
     }
 
-    public void backwards(float[] blames, float learningRate) {
-        float[] prevErrorSignal = blames;
-
-        for (int i = layers.length - 1; i >= 0; i--) {
-            prevErrorSignal = layers[i].backwardsPass(prevErrorSignal, learningRate);
-        }
-    }
-
-    // ---------- SAVE / LOAD ----------
+    // ---------- SAVE ----------
 
     static class SavedNetwork {
-        int inputSize;
-        int hiddenSize;
-        int outputSize;
-        int numHiddenLayers;
-        float[][][] weights; // [layer][neuron][weight]
-        float[][] biases;    // [layer][neuron]
+        int embedSize;
+        int vocabSize;
+        int numHeads;
+        int numBlocks;
+        int ffSize;
+        float[][][] transformerWeights;
+        float[][] transformerBiases;
+        float[][] outputWeights;
+        float[] outputBiases;
     }
 
     public void saveWeights(String path) {
         try {
             SavedNetwork sn = new SavedNetwork();
-            sn.numHiddenLayers = layers.length - 1;
-            sn.inputSize = layers[0].getInputSize();
-            sn.hiddenSize = layers[0].getNumNeurons();
-            sn.outputSize = layers[layers.length - 1].getNumNeurons();
+            sn.embedSize = embedSize;
+            sn.vocabSize = vocabSize;
 
-            sn.weights = new float[layers.length][][];
-            sn.biases = new float[layers.length][];
+            // Save transformer layers separately from output layer
+            Layer[] tLayers = getAllTransformerLayers();
+            sn.transformerWeights = new float[tLayers.length][][];
+            sn.transformerBiases = new float[tLayers.length][];
 
-            for (int l = 0; l < layers.length; l++) {
-                Layer layer = layers[l];
+            for (int l = 0; l < tLayers.length; l++) {
+                Layer layer = tLayers[l];
                 int n = layer.getNumNeurons();
-                sn.weights[l] = new float[n][];
-                sn.biases[l] = new float[n];
+                sn.transformerWeights[l] = new float[n][];
+                sn.transformerBiases[l] = new float[n];
 
                 for (int i = 0; i < n; i++) {
                     Neuron neuron = layer.getNeurons()[i];
                     float[] w = neuron.getWeights();
-                    sn.weights[l][i] = new float[w.length];
-                    System.arraycopy(w, 0, sn.weights[l][i], 0, w.length);
-                    sn.biases[l][i] = neuron.getBias();
+                    sn.transformerWeights[l][i] = new float[w.length];
+                    System.arraycopy(w, 0, sn.transformerWeights[l][i], 0, w.length);
+                    sn.transformerBiases[l][i] = neuron.getBias();
                 }
+            }
+
+            // Save output layer separately so it can expand independently
+            int outNeurons = outputLayer.getNumNeurons();
+            sn.outputWeights = new float[outNeurons][];
+            sn.outputBiases = new float[outNeurons];
+
+            for (int i = 0; i < outNeurons; i++) {
+                Neuron neuron = outputLayer.getNeurons()[i];
+                float[] w = neuron.getWeights();
+                sn.outputWeights[i] = new float[w.length];
+                System.arraycopy(w, 0, sn.outputWeights[i], 0, w.length);
+                sn.outputBiases[i] = neuron.getBias();
             }
 
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -105,46 +138,62 @@ public class Network {
                 gson.toJson(sn, fw);
             }
 
-            //System.out.println("Saved weights to: " + path);
-
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    public static Network loadOrCreate(String path, int inputSize, int hiddenSize, int outputSize, int numHiddenLayers) {
-        File f = new File(path);
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    // ---------- LOAD ----------
 
+    public static Network loadOrCreate(String path, int embedSize, int vocabSize, int numHeads, int numBlocks, int ffSize) {
+        File f = new File(path);
         if (!f.exists()) {
             System.out.println("No weights file found. Creating new network.");
-            return new Network(inputSize, hiddenSize, outputSize, numHiddenLayers);
+            return new Network(embedSize, vocabSize, numHeads, numBlocks, ffSize);
         }
 
         try (FileReader fr = new FileReader(f)) {
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
             SavedNetwork sn = gson.fromJson(fr, SavedNetwork.class);
 
-            Network net = new Network(inputSize, hiddenSize, outputSize, numHiddenLayers);
+            Network net = new Network(embedSize, vocabSize, numHeads, numBlocks, ffSize);
 
-            // Copy all layers except possibly expanded output
-            int minLayers = Math.min(net.layers.length, sn.weights.length);
+            // Load transformer layers
+            Layer[] tLayers = net.getAllTransformerLayers();
+            int minLayers = Math.min(tLayers.length, sn.transformerWeights.length);
 
             for (int l = 0; l < minLayers; l++) {
-                Layer layer = net.layers[l];
-                int numNeuronsCurrent = layer.getNumNeurons();
-                int numNeuronsSaved = sn.weights[l].length;
-                int neuronsToCopy = Math.min(numNeuronsCurrent, numNeuronsSaved);
+                Layer layer = tLayers[l];
+                int neuronsToCopy = Math.min(layer.getNumNeurons(), sn.transformerWeights[l].length);
 
                 for (int i = 0; i < neuronsToCopy; i++) {
                     Neuron neuron = layer.getNeurons()[i];
-
-                    float[] savedW = sn.weights[l][i];
+                    float[] savedW = sn.transformerWeights[l][i];
                     float[] w = neuron.getWeights();
                     int wToCopy = Math.min(w.length, savedW.length);
                     System.arraycopy(savedW, 0, w, 0, wToCopy);
-                    neuron.setBias(sn.biases[l][i]);
+                    neuron.setBias(sn.transformerBiases[l][i]);
                 }
-                // Extra neurons (if output expanded) keep random init
+            }
+
+            // Load output layer with expansion support
+            // Only copy neurons that existed before, new vocab words keep random init
+            int savedOutputSize = sn.outputWeights.length;
+            int currentOutputSize = net.outputLayer.getNumNeurons();
+            int neuronsToCopy = Math.min(currentOutputSize, savedOutputSize);
+
+            if (savedOutputSize < currentOutputSize) {
+                System.out.println("Vocab expanded from " + savedOutputSize + " to " + currentOutputSize
+                        + " — new words will use random init and improve with training.");
+            }
+
+            for (int i = 0; i < neuronsToCopy; i++) {
+                Neuron neuron = net.outputLayer.getNeurons()[i];
+                float[] savedW = sn.outputWeights[i];
+                float[] w = neuron.getWeights();
+                int wToCopy = Math.min(w.length, savedW.length);
+                System.arraycopy(savedW, 0, w, 0, wToCopy);
+                neuron.setBias(sn.outputBiases[i]);
             }
 
             System.out.println("Loaded weights from: " + path);
@@ -153,7 +202,7 @@ public class Network {
         } catch (Exception e) {
             e.printStackTrace();
             System.out.println("Failed to load weights. Creating new network.");
-            return new Network(inputSize, hiddenSize, outputSize, numHiddenLayers);
+            return new Network(embedSize, vocabSize, numHeads, numBlocks, ffSize);
         }
     }
 }

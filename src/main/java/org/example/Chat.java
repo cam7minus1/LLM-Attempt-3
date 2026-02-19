@@ -9,18 +9,18 @@ public class Chat {
     private final Network network;
     private final Tokenizer tokenizer;
     private final int windowSize;
+    private final int embedSize;
 
-    public Chat(Network network, Tokenizer tokenizer, int windowSize) {
+    public Chat(Network network, Tokenizer tokenizer, int windowSize, int embedSize) {
         this.network = network;
         this.tokenizer = tokenizer;
         this.windowSize = windowSize;
+        this.embedSize = embedSize;
     }
 
     public void start() {
         System.out.println("Chat started. Type 'exit' to quit.");
-
         Scanner scanner = new Scanner(System.in);
-
         List<Integer> history = new ArrayList<>();
 
         while (true) {
@@ -36,29 +36,22 @@ public class Chat {
             history.addAll(userTokens);
 
             String response = generateResponse(history);
-
             System.out.println("Bot: " + response);
 
             List<Integer> botTokens = tokenizeSentence(response);
             history.addAll(botTokens);
 
             if (history.size() > windowSize) {
-                int excess = history.size() - windowSize;
-                history = history.subList(excess, history.size());
+                history = history.subList(history.size() - windowSize, history.size());
             }
         }
     }
 
     private List<Integer> tokenizeSentence(String sentence) {
         List<Integer> tokens = new ArrayList<>();
-        String[] words = sentence.split("\\s+");
-
-        for (String w : words) {
+        for (String w : sentence.split("\\s+")) {
             int idx = tokenizer.getIndex(w);
-            if (idx == -1) {
-                continue;
-            }
-            tokens.add(idx);
+            if (idx != -1) tokens.add(idx);
         }
         return tokens;
     }
@@ -80,27 +73,18 @@ public class Chat {
     }
 
     private String generateResponse(List<Integer> history) {
-
         List<Integer> window = getWindow(history);
-
         StringBuilder sb = new StringBuilder();
 
         for (int i = 0; i < 20; i++) {
-
-            float[] inputVector = buildInputVector(window);
-
-            float[] output = network.forward(inputVector);
-
+            float[][] tokenWindow = buildTokenWindow(window);
+            float[] output = network.forward(tokenWindow);
             int nextToken = sampleWithTemperature(output, 0.8f);
-
             String nextWord = tokenizer.getWord(nextToken);
 
-            if (nextWord.equals("<END>")) {
-                break;
-            }
+            if (nextWord.equals("<END>")) break;
 
             sb.append(nextWord).append(" ");
-
             window.remove(0);
             window.add(nextToken);
         }
@@ -110,54 +94,27 @@ public class Chat {
 
     private List<Integer> getWindow(List<Integer> history) {
         List<Integer> window = new ArrayList<>();
-
         int start = Math.max(0, history.size() - windowSize);
         for (int i = start; i < history.size(); i++) {
             window.add(history.get(i));
         }
-
         while (window.size() < windowSize) {
-            window.add(0);
+            window.add(0, 0);
         }
-
         return window;
     }
 
-    private float[] buildInputVector(List<Integer> window) {
-        int perTokenSize = 129; // 128 embedding floats + 1 position float
-        float[] vec = new float[windowSize * perTokenSize];
-
+    private float[][] buildTokenWindow(List<Integer> window) {
+        float[][] tokens = new float[windowSize][];
         for (int i = 0; i < windowSize; i++) {
-            int token = window.get(i);
-            String word = tokenizer.getWord(token);
+            String word = tokenizer.getWord(window.get(i));
             float[] emb = tokenizer.getEmbedding(word);
-
-            int base = i * perTokenSize;
-
-            if (emb != null && emb.length == 128) {
-                for (int j = 0; j < 128; j++) {
-                    vec[base + j] = emb[j];
-                }
-            }
-            // else leave as zeros for padding/unknown
-
-            // Position encoding
-            vec[base + 128] = (float) i / windowSize;
-        }
-
-        return vec;
-    }
-
-    private int argmax(float[] arr) {
-        int best = 0;
-        float bestVal = arr[0];
-
-        for (int i = 1; i < arr.length; i++) {
-            if (arr[i] > bestVal) {
-                bestVal = arr[i];
-                best = i;
+            if (emb != null && emb.length == embedSize) {
+                tokens[i] = emb;
+            } else {
+                tokens[i] = new float[embedSize];
             }
         }
-        return best;
+        return tokens;
     }
 }
