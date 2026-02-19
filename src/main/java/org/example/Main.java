@@ -36,11 +36,11 @@ public class Main {
 
             // 2. Network config
             int windowSize = 10;
-            int perTokenSize = 4; // 3 emb + 1 pos
+            int perTokenSize = 129; // 128 emb + 1 pos
             int inputSize = windowSize * perTokenSize; // 200
-            int hiddenSize = 64;
+            int hiddenSize = 256;
             int outputSize = vocabSize;
-            int numHiddenLayers = 2;
+            int numHiddenLayers = 6;
 
             // 3. Load or create network with weights
             String weightsPath = "src/main/resources/networkWeights.json";

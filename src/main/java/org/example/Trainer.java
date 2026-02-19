@@ -57,7 +57,7 @@ public class Trainer {
         train(trainingData, labels, epochs);
     }
 
-    // ---------------- REAL TRAIN (50-word context) ----------------
+    // ---------------- REAL TRAIN ----------------
 
     public void trainRealData(String cleanedFilePath, String embeddingsPath, int epochs) {
 
@@ -81,11 +81,10 @@ public class Trainer {
 
             for (String word : sortedWords) {
                 List<Double> vecD = loaded.get(word);
-                float[] vec = new float[]{
-                        vecD.get(0).floatValue(),
-                        vecD.get(1).floatValue(),
-                        vecD.get(2).floatValue()
-                };
+                float[] vec = new float[128];
+                for (int j = 0; j < 128; j++) {
+                    vec[j] = vecD.get(j).floatValue();
+                }
 
                 embeddings.put(word, vec);
                 vocabList.add(word);
@@ -107,24 +106,23 @@ public class Trainer {
                             words.add(w);
                         }
                     }
-
                     if (embeddings.containsKey("<END>")) {
                         words.add("<END>");
                     }
                 }
             }
 
-            if (words.size() < 51) {
-                System.out.println("Not enough words for 50-word context.");
+            if (words.size() < 11) {
+                System.out.println("Not enough words for context window.");
                 return;
             }
 
-            // 3. Build 50-word context windows
+            // 3. Build context windows
             List<float[]> inputs = new ArrayList<>();
             List<float[]> labels = new ArrayList<>();
 
-            int windowSize = 50;
-            int perTokenSize = 4; // 3 embedding + 1 position
+            int windowSize = 10;
+            int perTokenSize = 129; // 128 embedding + 1 position
             int inputSize = windowSize * perTokenSize;
 
             for (int i = windowSize; i < words.size(); i++) {
@@ -135,12 +133,11 @@ public class Trainer {
                     String w = words.get(i - windowSize + p);
                     float[] emb = embeddings.get(w);
 
-                    inputVec[offset] = emb[0];
-                    inputVec[offset + 1] = emb[1];
-                    inputVec[offset + 2] = emb[2];
-
+                    for (int j = 0; j < 128; j++) {
+                        inputVec[offset + j] = emb[j];
+                    }
                     float posNorm = (float)p / (float)(windowSize - 1);
-                    inputVec[offset + 3] = posNorm;
+                    inputVec[offset + 128] = posNorm;
 
                     offset += perTokenSize;
                 }
@@ -194,6 +191,14 @@ public class Trainer {
 
             float avgLoss = epochLoss / trainingData.length;
             System.out.println("Epoch " + e + " - Avg Loss: " + avgLoss);
+
+            // Save every 1000 epochs
+            network.saveWeights("src/main/resources/networkWeights.json");
+            // System.out.println("Checkpoint saved at epoch " + e);
+//            if (e % 5 == 0 && e > 0) {
+//                network.saveWeights("src/main/resources/networkWeights.json");
+//                System.out.println("Checkpoint saved at epoch " + e);
+//            }
         }
     }
 }

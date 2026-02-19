@@ -33,7 +33,6 @@ public class PrepData {
 
             while ((line = br.readLine()) != null) {
 
-                // Strip prefixes
                 if (line.startsWith("Human 1: ")) {
                     line = line.substring("Human 1: ".length());
                 } else if (line.startsWith("Human 2: ")) {
@@ -49,7 +48,7 @@ public class PrepData {
         }
 
         // -------------------------------
-        // 2. Overwrite the SAME trainingData.txt with cleaned lines
+        // 2. Overwrite trainingData.txt with cleaned lines
         // -------------------------------
         try (FileWriter fw = new FileWriter(trainingFile, false)) {
             for (String line : cleanedLines) {
@@ -73,7 +72,7 @@ public class PrepData {
                     vocab.add(w);
                 }
             }
-            vocab.add("<END>"); // fine to call multiple times, Set ignores duplicates
+            vocab.add("<END>");
         }
 
         // -------------------------------
@@ -96,14 +95,18 @@ public class PrepData {
 
                 for (String word : loaded.keySet()) {
                     List<Double> vecD = loaded.get(word);
-                    float[] vec = new float[]{
-                            vecD.get(0).floatValue(),
-                            vecD.get(1).floatValue(),
-                            vecD.get(2).floatValue()
-                    };
+                    float[] vec = new float[128];
+                    for (int j = 0; j < 128; j++) {
+                        vec[j] = vecD.get(j).floatValue();
+                    }
                     embeddings.put(word, vec);
 
-                    usedVectors.add(vec[0] + "," + vec[1] + "," + vec[2]);
+                    StringBuilder sigBuilder = new StringBuilder();
+                    for (int j = 0; j < 128; j++) {
+                        sigBuilder.append(vec[j]);
+                        if (j < 127) sigBuilder.append(",");
+                    }
+                    usedVectors.add(sigBuilder.toString());
                 }
 
             } catch (Exception e) {
@@ -126,12 +129,17 @@ public class PrepData {
             String signature;
 
             do {
-                vec = new float[3];
-                vec[0] = rand.nextFloat();
-                vec[1] = rand.nextFloat();
-                vec[2] = rand.nextFloat();
+                vec = new float[128];
+                for (int j = 0; j < 128; j++) {
+                    vec[j] = rand.nextFloat();
+                }
 
-                signature = vec[0] + "," + vec[1] + "," + vec[2];
+                StringBuilder sigBuilder = new StringBuilder();
+                for (int j = 0; j < 128; j++) {
+                    sigBuilder.append(vec[j]);
+                    if (j < 127) sigBuilder.append(",");
+                }
+                signature = sigBuilder.toString();
 
             } while (usedVectors.contains(signature));
 
@@ -144,14 +152,21 @@ public class PrepData {
             float[] vec;
             String signature;
             do {
-                vec = new float[]{ rand.nextFloat(), rand.nextFloat(), rand.nextFloat() };
-                signature = vec[0] + "," + vec[1] + "," + vec[2];
+                vec = new float[128];
+                for (int j = 0; j < 128; j++) {
+                    vec[j] = rand.nextFloat();
+                }
+                StringBuilder sigBuilder = new StringBuilder();
+                for (int j = 0; j < 128; j++) {
+                    sigBuilder.append(vec[j]);
+                    if (j < 127) sigBuilder.append(",");
+                }
+                signature = sigBuilder.toString();
             } while (usedVectors.contains(signature));
             usedVectors.add(signature);
             embeddings.put("<END>", vec);
         }
-        System.out.println("<END> in embeddings: " + embeddings.containsKey("<END>"));
-        System.out.println("<END> in embeddings: " + embeddings.containsKey("<END>"));
+
         System.out.println("<END> in embeddings: " + embeddings.containsKey("<END>"));
 
         // -------------------------------

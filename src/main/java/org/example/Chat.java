@@ -21,7 +21,6 @@ public class Chat {
 
         Scanner scanner = new Scanner(System.in);
 
-        // Conversation history as token indices
         List<Integer> history = new ArrayList<>();
 
         while (true) {
@@ -33,20 +32,16 @@ public class Chat {
                 break;
             }
 
-            // Tokenize user input
             List<Integer> userTokens = tokenizeSentence(userInput);
             history.addAll(userTokens);
 
-            // Generate response
             String response = generateResponse(history);
 
             System.out.println("Bot: " + response);
 
-            // Add bot tokens to history
             List<Integer> botTokens = tokenizeSentence(response);
             history.addAll(botTokens);
 
-            // Trim history to window size
             if (history.size() > windowSize) {
                 int excess = history.size() - windowSize;
                 history = history.subList(excess, history.size());
@@ -54,7 +49,6 @@ public class Chat {
         }
     }
 
-    // Convert sentence → list of token indices
     private List<Integer> tokenizeSentence(String sentence) {
         List<Integer> tokens = new ArrayList<>();
         String[] words = sentence.split("\\s+");
@@ -62,7 +56,6 @@ public class Chat {
         for (String w : words) {
             int idx = tokenizer.getIndex(w);
             if (idx == -1) {
-                // Unknown word → skip or map to 0
                 continue;
             }
             tokens.add(idx);
@@ -86,14 +79,12 @@ public class Chat {
         return scaled.length - 1;
     }
 
-    // Generate a response using autoregressive next-token prediction
     private String generateResponse(List<Integer> history) {
 
         List<Integer> window = getWindow(history);
 
         StringBuilder sb = new StringBuilder();
 
-        // Generate up to 20 tokens
         for (int i = 0; i < 20; i++) {
 
             float[] inputVector = buildInputVector(window);
@@ -104,14 +95,12 @@ public class Chat {
 
             String nextWord = tokenizer.getWord(nextToken);
 
-            // Stop if model predicts end-of-sentence marker
             if (nextWord.equals("<END>")) {
                 break;
             }
 
             sb.append(nextWord).append(" ");
 
-            // Slide window
             window.remove(0);
             window.add(nextToken);
         }
@@ -119,7 +108,6 @@ public class Chat {
         return sb.toString().trim();
     }
 
-    // Extract last windowSize tokens
     private List<Integer> getWindow(List<Integer> history) {
         List<Integer> window = new ArrayList<>();
 
@@ -128,7 +116,6 @@ public class Chat {
             window.add(history.get(i));
         }
 
-        // Pad with zeros if needed
         while (window.size() < windowSize) {
             window.add(0);
         }
@@ -136,9 +123,8 @@ public class Chat {
         return window;
     }
 
-    // Build input vector: [emb1, pos1, emb2, pos2, ...]
     private float[] buildInputVector(List<Integer> window) {
-        int perTokenSize = 4; // 3 embedding floats + 1 position float
+        int perTokenSize = 129; // 128 embedding floats + 1 position float
         float[] vec = new float[windowSize * perTokenSize];
 
         for (int i = 0; i < windowSize; i++) {
@@ -148,24 +134,20 @@ public class Chat {
 
             int base = i * perTokenSize;
 
-            if (emb != null && emb.length == 3) {
-                vec[base] = emb[0];
-                vec[base + 1] = emb[1];
-                vec[base + 2] = emb[2];
-            } else {
-                vec[base] = 0;
-                vec[base + 1] = 0;
-                vec[base + 2] = 0;
+            if (emb != null && emb.length == 128) {
+                for (int j = 0; j < 128; j++) {
+                    vec[base + j] = emb[j];
+                }
             }
+            // else leave as zeros for padding/unknown
 
-            // Position encoding (simple normalized index)
-            vec[base + 3] = (float) i / windowSize;
+            // Position encoding
+            vec[base + 128] = (float) i / windowSize;
         }
 
         return vec;
     }
 
-    // Pick highest-probability token
     private int argmax(float[] arr) {
         int best = 0;
         float bestVal = arr[0];

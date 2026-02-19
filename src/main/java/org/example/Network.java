@@ -105,7 +105,7 @@ public class Network {
                 gson.toJson(sn, fw);
             }
 
-            System.out.println("Saved weights to: " + path);
+            //System.out.println("Saved weights to: " + path);
 
         } catch (Exception e) {
             e.printStackTrace();
